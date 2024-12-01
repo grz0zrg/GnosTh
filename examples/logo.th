@@ -1,0 +1,139 @@
+;     ___                     _   _     
+;    / _ \  ____   ___   ___ | |_| |__  
+;   / /_\/ |  _ \ / _ \ / __│| __| '_ \ 
+;  / ╱ ╲ \ | | | | (_) |\__ \| |_| | | |
+;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
+;   \___/ Gnos Forth example code by grz
+
+; ===================== CONSTANTS
+: SYS_WORD_SIZE 4
+
+: FB_BASE 1e99a000
+: FB_SIZE 95ffc ; 1024 * 600 - 4
+: FB_WIDTH 400 ; 1024
+: FB_BPP 4
+: FB_BPP_SHIFT 2
+
+; ======================== STRING
+: puti
+	dup 0 < dup >is_negative? if negate then dup >value >temp
+	0 >digits
+	loop
+		digits 1 + >digits
+		temp a / dup >temp 0= until
+
+	#c allot
+	is_negative? if '-' over db! 1 + then
+	digits + 0 over db! >strptr
+
+	loop
+		strptr 1 - dup >strptr
+		value a % '0' + over db!
+		value a / dup >value 0= until
+
+	strptr is_negative? if 1 - then puts
+
+; ========================== MATH
+: clamp8
+	dup 0 < if drop 0 then
+	dup ff > if drop ff then
+
+: random_seed >rseed
+: random16 rseed bb75 * ffff & dup >rseed
+
+: in_bounds? rot over swap > if swap < if 0 ~ else 0 then else drop drop 0 then
+
+; ======================== COLORS
+: rgb_pack32 >b >g >r (b 10 <<) (g 8 <<) | r |
+
+: color_pack32 dup dup rgb_pack32
+
+; ====================== GRAPHICS
+: plot_index FB_BPP_SHIFT << FB_BASE + !
+: put_pixel FB_WIDTH * + plot_index
+: plot FB_WIDTH FB_BASE pix
+
+; clear 1/4 of the screen
+: cls >color FB_SIZE 0 FB_BPP do color swap FB_BASE + ! next
+
+; ===============================
+: ascii_map_3x3
+	[
+		0 89 2d 145 fe 1ff 1eb 12 19e f3 155 ba 52 38 10 54
+		1ef 1d3 193 1f7 13d d6 1f9 127 1fe 13f
+		82 52 18e 1c7 e3 77 1aa
+		17a 1fb 1cf eb 1df 5f 1eb 17d 1d7 1ec 15d 1c9 17f 16f 1ef 7f 13f 4f d6 97 1ed ad 1fd 155 95 193
+		1cf 111 1e7 2a 1c0
+	]
+
+: ascii_to_glyph SYS_WORD_SIZE * ascii_map_3x3 + @
+
+: draw_3x3d_glyph >scale >oy >ox >id
+	3 scale << 1 - >glyph_size
+	0 glyph_size 1 do >x
+		x scale >> >gx
+		0 glyph_size 5 do >y
+			gx y scale >> 3 * + >gi
+			(id 1 gi << &) 0 > if
+				0 5c 4 do dup 1 >> A!
+					00ffffff swap
+					0 > if ; depth shading
+						drop 3f A@ 1 >> 3 * - clamp8 color_pack32 then
+					y (glyph_size 3 -) > if drop 00080808 then ; bottom shading
+
+					(ox x +) A@ + B!
+					(oy y +) (x 2 >>) - A@ + A!
+
+					dup dup dup
+					B@ A@ plot
+					B@ A@ 1 + plot
+					B@ A@ 2 + plot
+					B@ A@ 3 + plot
+				next
+			then
+		next
+	next
+
+: draw_back_lines
+	0 >mx 1ff >my
+	30 227 18 do >y
+		random16 8 >> 18 + >ox
+		ox (FB_WIDTH ox -) 1 do >i
+			mx (my 7 >>) + >mx
+			my (mx 5 >>) - >my
+
+			80 (mx 1 >>) - clamp8
+			5c (mx 1 >>) - clamp8
+			ff mx - 1 >> clamp8
+			rgb_pack32
+
+			i (y ((mx my +) 7 >>) +) plot
+		next
+	next
+
+: draw_back_stars
+	1ff for drop
+		random16 dup >rn 9 * >index
+
+		6000 90000 index in_bounds? if
+			index FB_WIDTH % >y
+			18 3e8 y in_bounds? if
+				(rn ff &) color_pack32
+				index plot_index
+			then
+		then
+	next
+
+: logo entrypoint
+	0 gett >timer
+	d random_seed
+	0 cls
+
+	draw_back_lines draw_back_stars
+	2f ascii_to_glyph  a6 cc 6 draw_3x3d_glyph
+	32 ascii_to_glyph 1a0 cc 6 draw_3x3d_glyph
+	3a ascii_to_glyph 29a cc 6 draw_3x3d_glyph
+
+	timer gett puti "ms" puts
+
+	loop again

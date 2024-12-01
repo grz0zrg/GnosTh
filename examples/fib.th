@@ -1,0 +1,40 @@
+;     ___                     _   _     
+;    / _ \  ____   ___   ___ | |_| |__  
+;   / /_\/ |  _ \ / _ \ / __│| __| '_ \ 
+;  / ╱ ╲ \ | | | | (_) |\__ \| |_| | | |
+;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
+;   \___/ Gnos Forth example code by grz
+; --------------------------------------
+; number --
+: puti
+	dup 0 < dup >is_negative? if negate then dup >value >temp
+	0 >digits
+	loop
+		digits 1 + >digits
+		temp a / dup >temp 0= until
+
+	#c allot
+	is_negative? if '-' over db! 1 + then
+	digits + 0 over db! >strptr
+
+	loop
+		strptr 1 - dup >strptr
+		value a % '0' + over db!
+		value a / dup >value 0= until
+
+	strptr is_negative? if 1 - then puts
+
+; n b a -- f
+: fibrec
+	dup 2 <= if
+		drop swap drop else
+		dup 2 > if 
+			1 - rot rot dup rot + rot fibrec
+		else drop then then
+
+: fib entrypoint
+	1 16 1 do >j
+		1 1 j fibrec puti ' ' putc
+	next
+	"..." puts
+	loop again

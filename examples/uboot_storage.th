@@ -1,0 +1,219 @@
+;     ___                     _   _     
+;    / _ \  ____   ___   ___ | |_| |__  
+;   / /_\/ |  _ \ / _ \ / __│| __| '_ \ 
+;  / ╱ ╲ \ | | | | (_) |\__ \| |_| | | |
+;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
+;   \___/ Gnos Forth example code by grz
+; -------------------------------------->
+; CONSTANTS
+; -------------------------------
+: FB_BASE 1e99a000
+: FB_SIZE 95ffc ; 1024 * 600 - 4
+: FB_WIDTH 400 ; 1024
+: FB_BPP 4
+: FB_BPP_SHIFT 2
+
+: LF a ; newline
+; -------------------------------
+; GRAPHICS
+; -------------------------------
+: cls >color (FB_SIZE FB_BPP_SHIFT <<) 0 FB_BPP do color swap FB_BASE + ! next
+
+; index --
+: plot FB_WIDTH FB_BASE pix
+
+; number --
+: puti
+	dup 0 < dup >is_negative? if negate then dup >value >temp
+	0 >digits
+	loop
+		digits 1 + >digits
+		temp a / dup >temp 0= until
+
+	#c allot
+	is_negative? if '-' over db! 1 + then
+	digits + 0 over db! >strptr
+
+	loop
+		strptr 1 - dup >strptr
+		value a % '0' + over db!
+		value a / dup >value 0= until
+
+	strptr is_negative? if 1 - then puts
+; -------------------------------
+; MEMORY UTILS
+; -------------------------------
+; addr. --
+: mem0 dup >addr dlen 0 swap 1 do 0 swap addr + db! next addr
+; -------------------------------
+; ARM UTILS (platform dependent)
+; -------------------------------
+: ARM_WFE $e320f002
+; -------------------------------
+; U-BOOT STUFF
+; -------------------------------
+; u-boot API return value type: include/api_public.h
+: API_NOERR 0
+: API_EINVAL 1
+: API_ENODEV 2
+: API_ENOMEM 3
+: API_EBUSY 4
+: API_EIO 5
+: API_ESYSC 6
+
+; u-boot device type: include/api_public.h
+: DEV_TYP_NONE 0
+: DEV_TYP_NET 1
+: DEV_TYP_STOR 2
+
+: DT_STOR_IDE 10
+: DT_STOR_SCSI 20
+: DT_STOR_USB 40
+: DT_STOR_MMC 80
+: DT_STOR_SATA 100
+
+; -- u-boot device_info members access
+: devinfo_type @
+: devinfo_cookie 4 + @
+: devinfo_blockcount 8 + @
+: devinfo_block_size c + @
+: devinfo_hwaddr 8 +
+: devinfo_state 10 + @
+
+; -- u-boot device_info addr.
+: dev_allot #14 allot mem0
+
+; u-boot device info addr. --
+: dev_enum_print
+	LF putc
+	"DEVICE INFO:" puts
+	dup >devinfo dev_enum
+	LF putc " dev. type: " puts
+	; print device_info struct content
+	devinfo devinfo_type dup >devtype f & DEV_TYP_STOR = if
+		"storage" puts
+		
+		devtype f0 & {
+			DT_STOR_IDE {
+				" (IDE)" puts
+			} case
+			DT_STOR_SCSI {
+				" (SCSI)" puts
+			} case
+			DT_STOR_USB {
+				" (USB)" puts
+			} case
+			DT_STOR_MMC {
+				" (MMC)" puts
+			} case
+			DT_STOR_SATA {
+				" (SATA)" puts
+			} case
+			" (unknown type: " puts puti ")"
+		} call
+
+		LF putc  " cookie: " puts
+		devinfo devinfo_cookie puti
+		LF putc  " block count: " puts
+		devinfo devinfo_blockcount puti
+		LF putc  " block size: " puts
+		devinfo devinfo_block_size puti
+	else
+		LF putc  " cookie: " puts
+		devinfo devinfo_cookie puti
+		LF putc  "network (" puts
+		devinfo devinfo_hwaddr puts ")" puts
+	then
+	LF putc  " state: " puts
+	devinfo devinfo_state puti
+
+: uboot_storage entrypoint
+	; allot U-Boot device_info struct
+	dev_allot dup >devinfo
+	; enum device and print device infos
+	dev_enum_print
+	; open device; consider a storage device (no network device)
+	devinfo dev_open {
+		LF putc "dev_open: " puts
+		API_EINVAL {
+			"API_EINVAL" puts
+		} case
+		API_EBUSY {
+			"API_EBUSY" puts
+		} case
+		API_ENODEV {
+			"API_ENODEV" puts
+		} case
+		0 {
+			"ok" puts
+		} case
+		"unknown return value type: " puts puti
+	} call
+
+	LF putc
+
+	; allot a whole block buffer (512b)
+	#200 allot >buffer
+	; e800 is the unpartitioned space after the first partition (in my case the SD has a single small partition and rest is left as unpartitioned)
+	; it is computed as follow (bytes): (partition_start+partition_length)/block_size
+	; note that this assume partition start / length is aligned to the start of a block (could be unaligned as well but require a different computation)
+	e800 1 buffer devinfo dev_read {
+		"dev_read: " puts
+		API_EINVAL {
+			"API_EINVAL" puts
+		} case
+		API_ENODEV {
+			"API_ENODEV" puts
+		} case
+		0 {
+			"ok" puts
+		} case
+		"unknown return value type " puts puti
+	} call
+	LF putc " blocks read: " puts puti
+	LF putc " first value read: " puts buffer @ puti
+
+	LF putc
+
+	; increment first value of the block buffer
+	buffer @ 1 + buffer !
+
+	; write the block (same location as read)
+	e800 1 buffer devinfo dev_write {
+		"dev_write: " puts
+		API_EINVAL {
+			"API_EINVAL" puts
+		} case
+		API_ENODEV {
+			"API_ENODEV" puts
+		} case
+		API_EIO {
+			"API_EIO" puts
+		} case
+		0 {
+			"ok" puts
+		} case
+		"unknown return value type " puts puti
+	} call
+
+	; close device
+	devinfo dev_close {
+		LF putc "dev_close: " puts
+		API_EINVAL {
+			"API_EINVAL" puts
+		} case
+		API_ENODEV {
+			"API_ENODEV" puts
+		} case
+		0 {
+			"ok" puts
+		} case
+		"unknown return value type " puts puti
+	} call
+
+	loop
+		getc
+		putc
+
+		ARM_WFE
+	again

@@ -1,0 +1,19 @@
+kernel=u-boot.bin
+disable_splash=1
+boot_delay=0
+enable_uart=0
+dtparam=act_led_trigger=none
+camera_auto_detect=0
+display_auto_detect=0
+force_eeprom_read=0
+ignore_lcd=1
+disable_touchscreen=1
+disable_fw_kms_setup=1
+disable_poe_fan=1
+auto_initramfs=0
+force_turbo=0
+initial_turbo=10
+hdmi_group=2
+hdmi_mode=87
+hdmi_cvt=1024 600 60 6 0 0 0
+hdmi_drive=1

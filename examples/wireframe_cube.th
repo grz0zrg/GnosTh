@@ -1,0 +1,127 @@
+;     ___                     _   _     
+;    / _ \  ____   ___   ___ | |_| |__  
+;   / /_\/ |  _ \ / _ \ / __│| __| '_ \ 
+;  / ╱ ╲ \ | | | | (_) |\__ \| |_| | | |
+;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
+;   \___/ Gnos Forth example code by grz
+
+; ===================== CONSTANTS
+: FB_BASE 1e99a000
+: FB_SIZE 95ffc ; 1024 * 600 - 4
+: FB_WIDTH 400 ; 1024
+: FB_BPP 4
+: FB_BPP_SHIFT 2
+
+; ========================== MATH
+: abs dup 0 < if negate then
+
+; ====================== GRAPHICS
+: backbuffer_allot #258000 allot >buffer ; allocate a buffer the size of the screen to eliminate tearings
+: plot FB_WIDTH buffer pix ; plot into buffer (replace buffer by FB_BASE here and comment "cpyrct" line / call for a faster version with tearings)
+
+; draw a rect
+: rect >color >h >w >y >x
+	(h 1 -) for B!
+		(w 1 -) for A!
+			color (x A@ +) (y B@ +) plot
+		next
+	next
+
+; copy backbuffer rect to screen
+: cpyrct >srcy >srcx >srch >srcw >dsty >dstx
+	(srch 1 -) for
+		(dup srcy + FB_WIDTH *) >sy dsty + >cy 
+		(srcw 1 -) for
+			(dup srcx +) sy + FB_BPP_SHIFT << buffer + @
+			(swap dstx +) cy FB_WIDTH FB_BASE pix
+		next
+	next
+
+; copy entire backbuffer to screen
+: cpybuf (FB_SIZE FB_BPP_SHIFT <<) 0 FB_BPP do (dup buffer + @) swap FB_BASE + ! next
+
+; clear screen
+: cls >color (FB_SIZE FB_BPP_SHIFT <<) 0 FB_BPP do color swap FB_BASE + ! next
+
+; line
+: bresenham_line >x1 >x2 >y1 >y2
+	x2 x1 - abs >dx
+	y2 y1 - abs negate >dy
+	x1 x2 < if 1 else 1 negate then >sx
+	y1 y2 < if 1 else 1 negate then >sy
+	dx dy + >err
+
+	loop
+		00ffffff x1 y1 plot
+
+		(x1 x2 =) (y1 y2 =) &
+
+		(2 err *) dup dy >= if
+			err dy + >err
+			x1 sx + >x1
+		then
+		dx <= if
+			err dx + >err
+			y1 sy + >y1
+		then
+	until 00ffffff x2 y2 plot
+
+: wireframe_cube entrypoint
+	0 cls
+
+	backbuffer_allot
+
+	0 >frame 200 C! 0 D!
+	loop
+		106 23 1fa 212 0 rect ; clear cube part
+
+		15e ; cube offset y
+		80 ((frame ff &) 80 -) abs - dup >tr - >oyt
+
+		3 for
+			C@ D@ 7 >>+ C! ; ms
+			D@ C@ 7 >>- D! ; mc
+
+			3 & 0= if
+				C@ 1 - C!
+			then
+		next
+
+		0 >lfx 0 >lfy
+
+		200 A! 0 B!
+		d04 for
+			A@ B@ 9 >>+ A! ; x
+			B@ A@ 9 >>- B! ; y
+
+			3f & 0= if ; rotate anim
+				A@ tr 2 >>- A!
+			then
+
+			00ffffff
+			208 ; ox (horz offset)
+			(A@ D@ *) (B@ C@ *) - ; rx
+			b >>+ ; px + ox
+			oyt ; oy (vert offset)
+			(A@ C@ *) (B@ D@ *) + ; ry
+			b >>+ ; py + oy
+
+			; interior line
+			B@ 200 = if
+				lfx 0= if
+					dup >lfy over >lfx
+				else
+					dup >fy over >fx
+
+					fy lfy fx lfx bresenham_line
+				then
+			then
+
+			; outline
+			plot
+		next
+
+		frame 1 + >frame
+
+		106 23 1f4 212 106 23 cpyrct
+	again
