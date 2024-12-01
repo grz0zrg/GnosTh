@@ -1,6 +1,6 @@
 # GnosTh
 
-[Forth](https://en.wikipedia.org/wiki/Forth_(programming_language) based dialect / compiler for 32-bit ARM processors. (ARMv6 as dev. target CPU)
+[Forth](https://en.wikipedia.org/wiki/Forth_(programming_language)) based dialect / compiler for 32-bit ARM processors. (ARMv6 as dev. target CPU)
 
 Built upon a minimal Forth interpreter called [ARM-ForthLite](https://github.com/grz0zrg/ARM-ForthLite/) which was revamped into this Forth dialect / compiler with syntactic changes to suit my needs, goal was to balance minimalism with features.
 
@@ -30,7 +30,7 @@ Dialect is built around a small parser and has some syntactic sugar borrowed fro
 
 Unknown words are interpreted as hexadecimal numbers so the compiler generate a data stack push instruction on them.
 
-Available words (~70) :
+### Available words (~70)
 
 * word definition *:*
 * stack manipulation *dup*, *drop*, *swap*, *over*, *rot*
@@ -46,7 +46,9 @@ Available words (~70) :
 
 The return stack is not exposed, dialect only handle integer arithmetic, fractional numbers can be represented as fixed-point.
 
-Syntactic features (not implemeted as a word) :
+## Syntactic features
+
+These are not implemeted as a word.
 
 * strings : "..." (no escaping though)
 * arrays definition (32-bit values) : [0 1 2 3 ...]
