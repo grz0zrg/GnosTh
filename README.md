@@ -8,7 +8,7 @@ Dialect is slightly oriented for graphics stuff (prototyping) but is still quite
 
 [Das U-Boot](https://en.wikipedia.org/wiki/Das_U-Boot) API is used for I/O, this part may be of special interest for baremetal enthusiasts as it can be reused easily and demonstrate full usage of U-Boot API from assembly. (see *uboot* directory)
 
-Also works without U-Boot but the I/O words must be reimplemented.
+Also works without U-Boot but the I/O words must be reimplemented as needed.
 
 Compiler code is commented and is fairly small with ~350 lines of ARM assembly plus some more for the words. (~500 total)
 
@@ -16,7 +16,7 @@ See a write-up [here](https://www.onirom.fr/wiki/blog/30-11-2024_writing_a_small
 
 This compiler does not handle errors at all. (by design; simpler but has gotchas !)
 
-Compiler size is about 6kB (binary), most of which is taken by the dictionary words especially U-Boot API related words (3kB binary when all U-Boot API words are removed), can easily reach 1 to ~2kB with small amount of words. Generated code might take a lot of space since it use inline expansion optimization by default.
+Compiler size is ~6kB (binary), most of which is taken by the dictionary words especially U-Boot API related words (~3kB binary when all U-Boot API words are removed), can easily reach 1 to ~2kB with small amount of words. Generated code might take a lot of space since it use inline expansion optimization by default.
 
 Mostly created for fun, a practical exploration / experiment of Forth / compiler.
 
@@ -35,13 +35,14 @@ Unknown words are interpreted as hexadecimal numbers so the compiler generate a 
 * word definition *:*
 * stack manipulation *dup*, *drop*, *swap*, *over*, *rot*
 * 32-bit memory access *@* *!* also have the equivalent for byte access *db@* *db!*
-* data allocation *allot* and a way to get data length *dlen*
-* logic : *0=* *0<>* *=* *<* *>* *<=* *=>* *~* *&* *|* *^* *<<* *>>* *>>>*
+* data allocation *allot*, a way to get data length *dlen* and a way to align next alloted data *align*
+* logic : *0=* *0<>* *=* *<>* *<* *>* *<=* *=>* *~* *&* *|* *^* *<<* *>>* *>>>*
 * flow controls *loop*, *again*, *until*, *for*, *do*, *next*, *if*, *else*, *then*, *call*, *case*
 * arithmetic (* / % */ - + negate >>+ >>-)
 * registers access *A!* *A@* *B!* *B@* *C!* *C@* *D!* *D@*
 * special immediate words *entrypoint*, *#!*
 * I/O provided by Das U-Boot API *getc*, *putc*, *tstc* etc.
+* Das U-Boot specifics (use extended U-Boot API) *cache_care*
 * graphics related speedup word *pix*
 
 The return stack is not exposed, dialect only handle integer arithmetic, fractional numbers can be represented as fixed-point.
@@ -57,7 +58,8 @@ These are not implemeted as a word.
 * global variables definition : >my_variable
 * immediate number (push a number on compiler stack) : #42
 * verbatim value (compile verbatim; useful to compile some OP code directly) : $42
-* line comment with ;
+* line comment starts with ;
+* parenthesis are ignored so they can be used as a way to group words / improve postfix readability
 
 Strings are length prefixed and null terminated, arrays (and the ones allocated with *allot*) are length prefixed so *dlen* can be used to fetch data length.
 
@@ -204,7 +206,9 @@ Compiler generate inline code by default, making it optional through a definitio
 
 My U-Boot version has a custom patch to makes U-Boot CPU exception handling works which makes for easier debugging on real hardware, the code still works without this patch but it will crash on an exception without any reports. (U-Boot exception report print various useful informations about register states etc.)
 
-See my U-Boot [write-up](https://www.onirom.fr/wiki/blog/30-11-2024_writing_a_small_forth_based_rpi_os_part_1_easy_io_with_uboot_for_baremetal_usage/) for the patch.
+My U-Boot also has an extended API which has cache maintenance stuff exposed. (used by *cache_care* word)
+
+See my U-Boot [write-up](https://www.onirom.fr/wiki/blog/30-11-2024_writing_a_small_forth_based_rpi_os_part_1_easy_io_with_uboot_for_baremetal_usage/) for the patch and API extension.
 
 ## Examples
 
@@ -212,10 +216,17 @@ Examples cover most of the features.
 
 * *logo.th* is a procedural graphics example showing a pseudo 3D logo, also serve as a benchmark
 * *wireframe_cube.th* is a realtime graphics example showing an animated pseudo 3D wireframe cube
+* *wireframe_cube_rpi.th* same as above but way faster with RPI 0 hw based double buffering, it use mailbox (CPU / VideoCode GPU interface) so may be adapted to work on others PI
 * *uboot_storage.th* is a U-Boot API I/O storage device example
 * *fib.th* is a recursion example
 
-Warning : Samples works with / without cache but there is no cache invalidations done; some other programs (or variations) might have odd behaviors with some CPU with cache on. Might be preferable to test with CPU cache disabled.
+*lib* directory has shared code which is included into other files on build with an awk pre-processing step to mimic C like #include directives. (see `Makefile`)
+
+Note : Samples were tested with / without CPU cache on a RPI 0 1.3 board (ARM1176JZF-S), caching may introduce predictability issues in some programs so it may be good to disable CPU caches to rule these issues out first, cache maintenance can be performed with the *cache_care* word and is used in some example such as *fib.th* or *wireframe_cube_rpi.th*.
+
+Also note that the graphics example works on a pre initialized framebuffer (U-Boot framebuffer in my case), the RPI cube require to change U-Boot framebuffer setup to double the virtual height at initialization or do a full framebuffer setup. (see my U-Boot [write-up](https://www.onirom.fr/wiki/blog/30-11-2024_writing_a_small_forth_based_rpi_os_part_1_easy_io_with_uboot_for_baremetal_usage/))
+
+Sources are converted to an assembly source on build. (see Makefile)
 
 ## Build
 

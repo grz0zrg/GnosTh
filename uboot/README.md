@@ -13,7 +13,7 @@ There is two implementation of the API which match U-Boot C API samples :
 
 The standalone API is simpler but have fewer features, it is also dodgy as it poke into U-Boot internals so may change heavily in different U-Boot version, i used it early on as it was simpler than the standard API.
 
-*rpi_0_sd* directory have my Das U-Boot build (from *v2024.10* branch) for RPI Zero 1.3 ready to be used / copied to a SD, the build is optimized for filesize / boot speed with many stuff disabled, also have my patch to make exception works, note that it load a *gnos.bin* program name from the SD. (not *program.bin*) The directory also have a RPI configuration file optimized for boot speed. (adapt to your use case !)
+*rpi_0_sd* directory have my Das U-Boot build (from *v2024.10* branch) for RPI Zero 1.3 ready to be used / copied to a SD, all caches are enabled and the build is optimized for filesize / boot speed with many stuff disabled, also have my patch to make exception works and extended U-Boot API, it doesn't have a dual framebuffer setup though, also note that it load a *gnos.bin* program name from the SD. (not *program.bin*) The directory also have a RPI configuration file optimized for boot speed. (adapt to your use case !)
 
 *rpi_0_config* directory have the U-Boot build config. file for RPI Zero 1.3 board, it was used to build the U-Boot binary in *rpi_0_sd*.
 
