@@ -1,10 +1,18 @@
+input-path = examples
+input-file = logo.th
+
 all: clean program cleanObjs
 
 all-copy: clean program cleanObjs copy
 
-# embed Forth source code into a .inc as GAS ASM
+# preprocess Forth sources :
+#  1. resolve "; #include file1 file2" (include directives)
+#  2. remove comments
+#  3. embed Forth code into a .inc as GAS ASM
 sample:
-	awk '{gsub(/"/, "\\\""); print ".ascii \"" $$0 "\\n\""}' examples/logo.th > program.th.inc
+	awk '{ if ($$1 == ";") { match($$0, /#include (.*)$$/, arr); if (arr[1]) { split(arr[1], files, " "); for (f in files) { while ((getline line < files[f]) > 0) print line; } next; } } print $$0; }' $(input-path)/${input-file} > program.th.full
+	awk -i inplace '{ sub(/;.*/, ""); if ($$0 != "") print }' program.th.full
+	awk '{gsub(/"/, "\\\""); print ".ascii \"" $$0 "\\n\""}' program.th.full > program.th.inc
 	awk -i inplace '{gsub(/\t/, "\\t"); print}' program.th.inc
 
 program.o: program.s
@@ -28,7 +36,7 @@ copy:
 
 # cleanup
 clean:
-	rm -f *.o *.elf program.bin program.th.inc
+	rm -f *.o *.elf program.bin program.th.full program.th.inc
 
 cleanObjs:
 	rm -f *.o *.elf

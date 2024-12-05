@@ -1,0 +1,13 @@
+; -------------------------------
+; MATH
+; -------------------------------
+: clamp8
+	dup 0 < if drop 0 then
+	dup ff > if drop ff then
+
+: random_seed >rseed
+: random16 rseed bb75 * ffff & dup >rseed
+
+: in_bounds? rot over swap > if swap < if 0 ~ else 0 then else drop drop 0 then
+
+: abs dup 0 < if negate then

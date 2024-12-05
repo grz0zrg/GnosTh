@@ -5,15 +5,14 @@
 ;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
 ;   \___/ Gnos Forth example code by grz
 
+; #include examples/lib/math.th
+
 ; ===================== CONSTANTS
 : FB_BASE 1e99a000
 : FB_SIZE 95ffc ; 1024 * 600 - 4
 : FB_WIDTH 400 ; 1024
 : FB_BPP 4
 : FB_BPP_SHIFT 2
-
-; ========================== MATH
-: abs dup 0 < if negate then
 
 ; ====================== GRAPHICS
 : backbuffer_allot #258000 allot >buffer ; allocate a buffer the size of the screen to eliminate tearings

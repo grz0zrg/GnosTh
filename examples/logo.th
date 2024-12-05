@@ -5,6 +5,8 @@
 ;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
 ;   \___/ Gnos Forth example code by grz
 
+; #include examples/lib/math.th examples/lib/io.th
+
 ; ===================== CONSTANTS
 : SYS_WORD_SIZE 4
 
@@ -13,35 +15,6 @@
 : FB_WIDTH 400 ; 1024
 : FB_BPP 4
 : FB_BPP_SHIFT 2
-
-; ======================== STRING
-: puti
-	dup 0 < dup >is_negative? if negate then dup >value >temp
-	0 >digits
-	loop
-		digits 1 + >digits
-		temp a / dup >temp 0= until
-
-	#c allot
-	is_negative? if '-' over db! 1 + then
-	digits + 0 over db! >strptr
-
-	loop
-		strptr 1 - dup >strptr
-		value a % '0' + over db!
-		value a / dup >value 0= until
-
-	strptr is_negative? if 1 - then puts
-
-; ========================== MATH
-: clamp8
-	dup 0 < if drop 0 then
-	dup ff > if drop ff then
-
-: random_seed >rseed
-: random16 rseed bb75 * ffff & dup >rseed
-
-: in_bounds? rot over swap > if swap < if 0 ~ else 0 then else drop drop 0 then
 
 ; ======================== COLORS
 : rgb_pack32 >b >g >r (b 10 <<) (g 8 <<) | r |
