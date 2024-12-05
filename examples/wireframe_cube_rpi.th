@@ -1,0 +1,196 @@
+;     ___                     _   _     
+;    / _ \  ____   ___   ___ | |_| |__  
+;   / /_\/ |  _ \ / _ \ / __│| __| '_ \ 
+;  / ╱ ╲ \ | | | | (_) |\__ \| |_| | | |
+;  \ ╲_/ / |_| |_|\___/ |___/ \__|_| |_|
+;   \___/ Gnos Forth example code by grz
+
+; #include examples/lib/math.th
+
+; ===================== CONSTANTS
+: FB_FIRST_BANK 1e742000 ; FB_BASE
+: FB_SECOND_BANK 1e99a000 ; FB_BASE + W * H * BPP
+: FB_SIZE 95ffc ; 1024 * 600 - 4
+: FB_WIDTH 400 ; 1024
+: FB_HEIGHT 258 ; 600
+: FB_BPP 4
+: FB_BPP_SHIFT 2
+
+; ================= RPI MAILBOXES
+; see u-boot/arch/arm/mach-bcm283x/include/mach/mbox.h for a good overview for bcm283x boards
+: MBOX_BASE 20000000 b880 + ; see u-boot/arch/arm/mach-bcm283x/init.c (rpi_mbox_base is computed from io_base + 00b880)
+: MBOX_READ_ADDR MBOX_BASE ; see bcm2835_mbox_regs
+: MBOX_POLL_ADDR MBOX_BASE 10 +
+: MBOX_SENDER_ADDR MBOX_BASE 14 +
+: MBOX_STATUS0_ADDR MBOX_BASE 18 +
+: MBOX_CONFIG_ADDR MBOX_BASE 1c +
+: MBOX_WRITE_ADDR MBOX_BASE 20 +
+: MBOX_STATUS1_ADDR MBOX_BASE 34 +
+: MBOX_FULL 80000000
+: MBOX_EMPTY 40000000
+: MBOX_RESPONSE_SUCCESS 80000000
+: MBOX_TAG_SETVIRTOFF 48009
+: MBOX_CHN_ARM_TO_VC 8
+: MBOX_REQUEST 0
+
+: mbox_allot #10 align #90 allot >mbox ; mbox msg buffer
+: mbox_phys_to_bus c0000000 mbox | ; BCM2835 (see u-boot/arch/arm/mach-bcm283x/phys2bus.c)
+: mbox_call ; see u-boot/arch/arm/mach-bcm283x/mbox.c
+	1 cache_care ; flush
+	mbox_phys_to_bus f & 0<> if
+		"mbox: illegal mbox data" puts a putc
+	then
+	; drain any stale responses
+	loop
+		(MBOX_STATUS0_ADDR @) MBOX_EMPTY &
+		(MBOX_READ_ADDR @) drop
+		until
+	; wait for space to send
+	loop (MBOX_STATUS1_ADDR @) MBOX_FULL & 0= until
+	; send request
+	dup f & (mbox_phys_to_bus (f ~) &) | MBOX_WRITE_ADDR !
+	; wait for response
+	loop (MBOX_STATUS0_ADDR @) MBOX_EMPTY & 0= until
+	; NOTE: commented because we don't actually care of the response
+	drop ; remove if uncommented below
+;	MBOX_READ_ADDR @ ; read response
+;	swap f & <> if ; validate response
+;		"mbox: response channel mismatch" puts a putc
+;	then
+	2 cache_care ; invalidate
+	; TODO: adds a way to retrieve the response data ?
+
+; hardware buffers flip
+: mbox_fb_flip ; see u-boot/arch/arm/mach-bcm283x/msg.c
+	20 mbox ! ; message length
+	MBOX_REQUEST (mbox 4 +) ! ; type
+	MBOX_TAG_SETVIRTOFF (mbox 8 +) ! ; tag
+	8 (mbox c +) !
+	8 (mbox 10 +) !
+	0 (mbox 14 +) !
+	FB_HEIGHT * (mbox 18 +) !
+	0 (mbox 1c +) ! ; end tag
+	MBOX_CHN_ARM_TO_VC mbox_call
+
+; ====================== GRAPHICS
+: init_fb_sync 0 gett >vsync_timer
+: init_fb_base FB_FIRST_BANK >fb_base
+: set_fb_draw_bank 0= if FB_FIRST_BANK else FB_SECOND_BANK then >fb_base
+
+: plot FB_WIDTH fb_base pix
+
+; draw a rectangle
+: rect >color >h >w >y >x
+	(h 1 -) for B!
+		(w 1 -) for A!
+			color (x A@ +) (y B@ +) plot
+		next
+	next
+
+; clear screen
+: cls >color (FB_SIZE FB_BPP_SHIFT <<) 0 FB_BPP do color swap fb_base + ! next
+
+; flip buffers based on a timer; roughly matching display refresh rate (60Hz)
+: fb_flip
+	vsync_timer gett 11 >= if
+		fb_base FB_FIRST_BANK = if
+			0 mbox_fb_flip
+			1 set_fb_draw_bank
+		else
+			1 mbox_fb_flip
+			0 set_fb_draw_bank
+		then
+		0 gett >vsync_timer ; reset
+	then
+
+: init_fb
+	mbox_allot ; for hardware flip
+
+	init_fb_sync
+	init_fb_base
+	0 cls ; clear first bank
+	1 set_fb_draw_bank
+	0 cls ; clear second bank
+
+; line
+: bresenham_line >x1 >x2 >y1 >y2
+	x2 x1 - abs >dx
+	y2 y1 - abs negate >dy
+	x1 x2 < if 1 else 1 negate then >sx
+	y1 y2 < if 1 else 1 negate then >sy
+	dx dy + >err
+
+	loop
+		00ffffff x1 y1 plot
+
+		(x1 x2 =) (y1 y2 =) &
+
+		(2 err *) dup dy >= if
+			err dy + >err
+			x1 sx + >x1
+		then
+		dx <= if
+			err dx + >err
+			y1 sy + >y1
+		then
+	until 00ffffff x2 y2 plot
+
+: wireframe_cube entrypoint
+	0 cache_care
+
+	init_fb
+
+	0 >frame 200 C! 0 D!
+	loop
+		106 23 1fa 212 0 rect ; clear cube part
+
+		15e ; cube offset y
+		80 ((frame ff &) 80 -) abs - dup >tr - >oyt
+
+		3 for
+			C@ D@ 7 >>+ C! ; ms
+			D@ C@ 7 >>- D! ; mc
+
+			3 & 0= if
+				C@ 1 - C!
+			then
+		next
+
+		0 >lfx 0 >lfy
+
+		200 A! 0 B!
+		d04 for
+			A@ B@ 9 >>+ A! ; x
+			B@ A@ 9 >>- B! ; y
+
+			3f & 0= if ; rotate anim
+				A@ tr 2 >>- A!
+			then
+
+			00ffffff
+			208 ; ox (horz offset)
+			(A@ D@ *) (B@ C@ *) - ; rx
+			b >>+ ; px + ox
+			oyt ; oy (vert offset)
+			(A@ C@ *) (B@ D@ *) + ; ry
+			b >>+ ; py + oy
+
+			; interior line
+			B@ 200 = if
+				lfx 0= if
+					dup >lfy over >lfx
+				else
+					dup >fy over >fx
+
+					fy lfy fx lfx bresenham_line
+				then
+			then
+
+			; outline
+			plot
+		next
+
+		fb_flip
+
+		frame 1 + >frame
+	again
