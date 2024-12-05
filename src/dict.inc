@@ -43,6 +43,16 @@ forth_word "allot" WORD_IMMEDIATE
     add r4, #4
     bic r4, #3                  @ align
 
+forth_word "align" WORD_IMMEDIATE
+    pop { r5 }
+    add r4, r4, r5              @ offset to get room for offseted length (so data is aligned)
+    sub r5, r5, #1
+    mov r10, r5
+    mvn r5, r5
+    add r4, r4, r10
+    and r4, r4, r5              @ align
+    sub r4, r4, #4              @ offset length; only data is aligned
+
 forth_word "@"
     ldr r5, [r5]
 
@@ -95,20 +105,24 @@ forth_word "dev_write"
 forth_word "reset"
     UBOOT_API_SYSCALL UBOOT_API_RESET
 
-forth_word "udelay"             @ test
+forth_word "udelay"
     UBOOT_API_SYSCALL UBOOT_API_UDELAY
 
-forth_word "envget"             @ test
+forth_word "envget"
     UBOOT_API_SYSCALL UBOOT_API_ENV_GET
 
-forth_word "envset"             @ test
+forth_word "envset"
     UBOOT_API_SYSCALL UBOOT_API_ENV_SET
 
-forth_word "putc"               @ debug only
+forth_word "putc"
     UBOOT_API_SYSCALL UBOOT_API_PUTC
 
-forth_word "puts"               @ debug only
+forth_word "puts"
     UBOOT_API_SYSCALL UBOOT_API_PUTS
+
+@ use extended U-Boot API (see README)
+forth_word "cache_care"
+    UBOOT_API_SYSCALL UBOOT_API_CACHE_CARE
 
 @ ====================== GRAPHICS
 forth_word "pix"

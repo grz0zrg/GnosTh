@@ -148,7 +148,7 @@ uboot_restore_sp:
 @ value which is a pointer to 
 @ U-Boot allocated api_signature
 @ struct in api/api.c
-.equ UBOOT_API_ADDR, 0x1bbab1c8 @ WARNING : might change with U-Boot config change (even simple bootcmd change might move it away !)
+.equ UBOOT_API_ADDR, 0x1bbac1f8 @ WARNING : might change with U-Boot config change (even simple bootcmd change might move it away !)
 
 @ U-Boot API func. offset
 .equ UBOOT_API_GETC, 1          @ I: none O: char.
@@ -167,6 +167,8 @@ uboot_restore_sp:
 .equ UBOOT_API_ENV_ENUM, 14     @ unsupported
 .equ UBOOT_API_ENV_GET, 15      @ I: env. name O: env. value
 .equ UBOOT_API_ENV_SET, 16      @ I: env. name followed by value (TOS) O: none
+@ U-Boot API custom extensions : see my U-Boot write-up
+.equ UBOOT_API_CACHE_CARE, 20   @ I: cache maintenance type to perform on entire cache, 1 dcache flush, 2 dcache invalidate, any other values is dcache + icache clean O: none
 
 @ U-Boot API syscall
 @                        r5: arg.
@@ -280,7 +282,7 @@ uboot_restore_sp:
             neg r5, r5
         .endif
     .endif
-    .if \number == UBOOT_API_PUTC || \number == UBOOT_API_PUTS || \number == UBOOT_API_UDELAY || \number == UBOOT_API_ENV_SET || \number == UBOOT_API_DEV_ENUM
+    .if \number == UBOOT_API_PUTC || \number == UBOOT_API_PUTS || \number == UBOOT_API_UDELAY || \number == UBOOT_API_ENV_SET || \number == UBOOT_API_DEV_ENUM || \number == UBOOT_API_CACHE_CARE
         pop { r5 }
     .endif
 .endm
