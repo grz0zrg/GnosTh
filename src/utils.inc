@@ -4,15 +4,19 @@
 @ and ease return stack controls
 @ ------------------------------->
 
+.equ FALSE, 0
+.equ TRUE, 1
+
 @ FORTH WORD TYPE
 .equ WORD_IMMEDIATE,0           @ a word called immediately (compile time)
 .equ WORD_RUNTIME, 1            @ a word called at runtime
 .equ WORD_VARIABLE, 2           @ a variable
 .equ WORD_ENTRY_POINT, 3        @ entry point
 
-.equ IS_LAST_WORD, 1
+.equ IS_LAST_WORD, TRUE
 
 .equ forth_word_counter, 0
+.equ forth_word_previous_flag, WORD_IMMEDIATE
 
 @ generate word dictionary data
 @ as a double linked list entry.
@@ -21,11 +25,16 @@
 @ end with RET which makes
 @ direct word calls works
 @ to make self-recursion works
-.macro forth_word string, flag=WORD_RUNTIME, last_word=0
+.macro forth_word string, flag=WORD_RUNTIME, last_word=FALSE
     .if forth_word_counter != 0
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT)) | (forth_word_previous_flag == WORD_IMMEDIATE)
     ret
+.else
+    .asciz "\x08"               @ reset stack + end IR
+    .align 2
+.endif
     .endif
-    .if \last_word == IS_LAST_WORD
+    .if \last_word == TRUE
         forth_last_word_addr:
     .endif
     999:
@@ -51,6 +60,14 @@
     .align 2
     .set forth_word_counter, forth_word_counter + 1
     @ ... code
+.if ((FORTH_OUTPUT_CODE == LLVM_IR_OUTPUT) & (\flag != WORD_IMMEDIATE))
+    .ascii "; \string\n"        @ add debug informations to output code
+.endif
+.if ((FORTH_OUTPUT_CODE == P5JS_OUTPUT) & (\flag != WORD_IMMEDIATE))
+    .ascii "// \string\n"       @ add debug informations to output code
+.endif
+
+    .equ forth_word_previous_flag, \flag
 .endm
 
 @ to manipulate the return stack

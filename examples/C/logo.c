@@ -4,7 +4,9 @@ set -e
 
 rm -f *.o *.elf *.bin
 arm-linux-gnueabihf-as --warn --fatal-warnings start.s -o start.o
-arm-linux-gnueabihf-gcc -Wall -O0 -march=armv6 -mtune=arm1176jzf-s -mfloat-abi=soft -ffreestanding -nostdlib -c logo.c -o program.o
+#clang --target=arm-linux-gnueabihf -march=armv6 -mtune=arm1176jzf-s -mfloat-abi=soft -c start.s -o start.o
+#clang -Wall -O3 --target=arm-linux-gnueabihf -march=armv6 -mtune=arm1176jzf-s -mfloat-abi=soft -ffreestanding -nostdlib -c logo.c -o program.o
+arm-linux-gnueabihf-gcc -Wall -O3 -march=armv6 -mtune=arm1176jzf-s -mfloat-abi=soft -ffreestanding -nostdlib -c logo.c -o program.o
 arm-linux-gnueabihf-ld -T rpi0.ld -nostdlib start.o program.o -o program.elf
 arm-linux-gnueabihf-objcopy program.elf -O binary program.bin
 arm-linux-gnueabihf-objdump -D -b binary -m arm program.bin --adjust-vma=0x80000

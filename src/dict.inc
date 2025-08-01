@@ -35,13 +35,16 @@ forth_word "rot"
 forth_word "allot" WORD_IMMEDIATE
     pop { r5 }
     add r10, r4, #4             @ assign data addr. (+4 to skip length)
-    adr r7, number_code_generic @ reuse generic number load code
+    ldr r7, [pc]                @ reuse generic number load code
+    b skip_number_code_generic_addr
+    .word number_code_generic
+    skip_number_code_generic_addr:
     ldmia r7, {r7-r9}           @ load generated code
     stmia r14!, {r7-r10}        @ copy generated code
     str r5, [r4], #4            @ store length
     add r4, r4, r5              @ offset data
-    add r4, #4
-    bic r4, #3                  @ align
+    add r4, r4, #4
+    bic r4, r4, #3              @ align
 
 forth_word "align" WORD_IMMEDIATE
     pop { r5 }
@@ -328,7 +331,8 @@ forth_word "D!"
 
 @ ==================== ARITHMETIC
 forth_word "negate"
-    neg r5, r5
+    mvn r5, r5
+    add r5, r5, #1
 
 forth_word "*"
     pop { r6 }

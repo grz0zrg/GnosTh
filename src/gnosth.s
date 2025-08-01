@@ -104,6 +104,7 @@ parse_number:
         str r12, [r14], #4      @ put values verbatim in code
         b parser
     7:
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
     cmp r12, #255               @ is 8 bits ?
     bhi generic_number
     optimized_number:           @ optimized 8 bits number
@@ -124,6 +125,13 @@ parse_number:
         push { r5 }
         ldr r5, [pc, #0]
         mov pc, pc              @ value is stored after this, stored by "compile" from r12
+.else
+    adr r9, parser
+    cmp r11, #VER_LITERAL_TKN   @ verbatim value ?
+    adreq r10, trans_verbatim
+    adrne r10, trans_literal    @ literal
+    b transpile
+.endif
 
 @ =============== EVALUATE A WORD
 @        last dict. word addr: r2
@@ -142,8 +150,16 @@ eval_word:
     bne 7f
         ldrb r8, [r9, #-1]     @@ check parsed word has a
         cmp r8, #STORE_TKN     @@ store token (to choose store / load code)
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
         adreq r7, var_assign_code
         adrne r7, var_load_code
+.else
+        adreq r7, trans_var_store
+        adrne r7, trans_var_load
+    .if TRANSPILE_GENERATE_GLOBAL_VARS == 1
+        add r9, r12, #10
+    .endif
+.endif
         b compile_var           @ generate var. code
     7:
     ands r9, r8, #0xff          @ is an immediate word ?
@@ -152,6 +168,7 @@ eval_word:
         rpush r5                @ return addr.
         mov pc, r10             @ jump to word code
     compile_word:
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
         ldrb r8, [r2, #8]       @ get last defined word flag
         cmp r8, #WORD_VARIABLE  @ when the last
         mov r8, r2              @ defined word
@@ -162,7 +179,7 @@ eval_word:
             cmp r9, #WORD_VARIABLE
             beq find_root_word
         7:
-        cmp r8, r12             @ detect self call
+        cmp r8, r12             @ detect self call from root definition
         bne inline_word
         call_word:              @ a regular word
             adr r11, word_code  @ call (STC) mainly
@@ -178,6 +195,10 @@ eval_word:
             bgt parser
             str r8, [r14], #4   @ copy word body to program addr.
             b copy_code
+.else
+        adr r9, parser
+        b transpile
+.endif
     word_code:                  @ generated call code:
         add r6, pc, #8          @ word code addr. to jump to
         rpush r6                @ will be stored after
@@ -224,11 +245,11 @@ forth:
         bne 5f
             rpushl r12 7f close_definition
             7:
-            ldrb r6, [r2, #8]   @ check word type
-            cmp r6, #WORD_ENTRY_POINT
-            bne 7f              @ if prev. def. was an entry
-                ldr r14, [r3]   @ point, restore dict. end
-            7:
+@            ldrb r6, [r2, #8]   @ check word type
+@            cmp r6, #WORD_ENTRY_POINT
+@            bne 7f              @ if prev. def. was an entry
+@                ldr r14, [r3]   @ point, restore dict. end
+@            7:
             mov r6, #DEFINITION_PST
             adr pc, 1b
     5:
@@ -247,6 +268,7 @@ forth:
             mov r6, #ARRAY_PST
             adr r7, 1b
             b compile_static_data
+.if FORTH_TRANSPILE == 0
     5:
         cmp r11, #END_QUOTATION_TKN           @ QUOTATION TERMINATOR ?
         bne 5f
@@ -259,6 +281,7 @@ forth:
         bne 5f
             adr r7, 1b
             b compile_quotation
+.endif
     5:                          @ CHAR ?
         cmp r11, #CHAR_TKN
         bne 5f
@@ -281,7 +304,7 @@ forth:
             str r8, [r7, #-4]   @ store length
             mov r8, #0
             strb r8, [r4], #1   @ add NUL character
-            add r4, #4
+            add r4, r4, #4
             bic r4, r4, #3      @ align code addr.
             b parser
     5:                          @ COMMENT ?
@@ -319,11 +342,18 @@ forth:
 @ ============= GO TO ENTRY POINT ; code is
 @ program compiled code addr. :r3 ; compiled at
 @ ===================== ON RETURN ; this point
-@ ===================== CLOBBERED ; so we jump
+@ ===================== CLOBBERED ; so jump
 @ =============================== ; to it !
 go_to_entry_point:
     rpop r7                     @ clean return stack
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
     add pc, r3, #4
+.else
+    adr r9, forever_loop
+    b trans_copy_footer
+    forever_loop:
+    b forever_loop              @ can't run transpiled code though !
+.endif
 
 @ ============= FINISH WORD PARSE
 @          current input addr: r1
@@ -374,8 +404,40 @@ variable_definition:
         add r4, r14, #4         @ point to next data def. (skip stored value)
         mov r10, r14            @ var. code addr.
         mov r14, r6             @ restore code addr.
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
         adr r7, var_assign_code
         b compile_var
+.else
+    .if TRANSPILE_GENERATE_GLOBAL_VARS == 1
+        add r9, r2, #10
+    .endif
+    ldr r7, [pc]
+    b compile_var
+    .word trans_var_store
+.endif
+
+@ = COMPILE DATA (STRING / VALUE)
+@                   data addr: r4
+@           current code addr:r14
+@ ===================== ON RETURN
+@ ===================== CLOBBERED
+@      r8, r9, r10, r11, r12, r14
+@ ===============================
+compile_static_data:
+    add r4, r4, #4              @ +4 because length will be stored prior data
+    mov r11, r4                 @ get static data addr.
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
+    adr r10, number_code_generic
+    ldmia r10, {r8-r10}         @ compile data code
+    stmia r14!, {r8-r11}
+    mov pc, r7
+.else
+    mov r9, r7
+    mov r12, r11
+    ldr r10, [pc]
+    b transpile
+    .word trans_literal
+.endif
 
 @ ============== START DEFINITION
 @       last dict. entry addr: r2
@@ -422,27 +484,19 @@ close_definition:
     cmp r5, #WORD_ENTRY_POINT   @ was an entry point ?
     ldreq r14, [r3]             @ yes ? restore default code target (dict.)
 
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
     ldr r7, ret_instruction     @ get RET opcode
     str r7, [r14], #4           @ store RET opcode
+.else
+    mov r7, #0
+    strb r7, [r14], #1
+    add r14, r14, #4            @ align
+    bic r14, r14, #3
+.endif
 
     mov r7, #WORD_RUNTIME
     strb r7, [r14, #8]          @ initialize next word type
     ret
-
-@ = COMPILE DATA (STRING / VALUE)
-@                   data addr: r4
-@           current code addr:r14
-@ ===================== ON RETURN
-@ ===================== CLOBBERED
-@           r8, r9, r10, r11, r14
-@ ===============================
-compile_static_data:
-    add r4, r4, #4              @ +4 because length will be stored prior data
-    mov r11, r4                 @ get static data addr.
-    adr r10, number_code_generic
-    ldmia r10, {r8-r10}         @ compile data code
-    stmia r14!, {r8-r11}
-    mov pc, r7
 
 @ ============= COMPILE QUOTATION
 @           current code addr:r14
@@ -450,6 +504,7 @@ compile_static_data:
 @ ===================== CLOBBERED
 @           r8, r9, r10, r11, r14
 @ ===============================
+.if FORTH_TRANSPILE == 0
 compile_quotation:
     add r10, r14, #20           @ compute length addr
     rpush r10                   @ push it, will be updated later
@@ -476,6 +531,7 @@ finish_quotation:
     sub r8, r14, r10            @ compute body length
     str r8, [r10, #-4]          @ update it
     mov pc, r7
+.endif
 
 @ ============ COMPILE A VARIABLE
 @    assign or load code addr: r7
@@ -485,6 +541,7 @@ finish_quotation:
 @  r7, r8, r9, r10, r11, r12, r14
 @ ===============================
 compile_var:
+.if ((FORTH_TRANSPILE == 0) & (FORTH_OUTPUT_CODE == ARM_OUTPUT))
     str r10, var_value_addr     @ store value address
     adr r10, var_code
     ldmia r10, {r8-r12}         @ load code
@@ -512,6 +569,16 @@ var_code:
     mov pc, pc
     var_value_addr:
     .word 0
+.else
+.if TRANSPILE_GENERATE_GLOBAL_VARS == 0
+    mov r12, r10
+.else
+    mov r12, r9
+.endif
+    adr r9, 0b
+    mov r10, r7
+    b transpile
+.endif
 
 @ == COPY CHARACTER TO CODE ADDR.
 @     current def. code addr: r14

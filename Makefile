@@ -24,6 +24,28 @@ program: sample program.o
 	arm-linux-gnueabihf-objcopy program.elf -O binary program.bin
 	wc -c program.bin
 
+# assemble bare program from transpiled LLVM code in 'program.ll' and
+# extracted data section in 'program_data.bin' + data loader stub in start.s (target: rpi0 + uboot)
+# didn't see any diff. on RPI0 with different -mcpu (chose strongarm due to being close to ARM2)
+assemble-llvm:
+	opt -O3 program.ll -o program.opt.ll
+	llc -march=arm -mcpu=strongarm -O=3 -filetype=obj program.opt.ll -o program.o
+	arm-linux-gnueabihf-as --warn --fatal-warnings bare/start.s -o start.o
+	arm-linux-gnueabihf-ld -r -b binary program_data.bin -o program_data.o
+	arm-linux-gnueabihf-objcopy --add-section .note.GNU-stack=/dev/null program_data.o
+	arm-linux-gnueabihf-ld -T bare/rpi0.ld -nostdlib start.o program_data.o program.o -o program.elf
+	arm-linux-gnueabihf-objcopy program.elf -O binary program.bin
+	wc -c program.bin
+
+# same as above but for tiny binary (target: RPI 0 1.3)
+# WARNING: this assume code don't use data (variables, string, array etc.)
+#          and no API words, works great for sizecoding graphics stuff !
+assemble-llvm-tiny:
+	opt -Oz program.ll -o program.opt.ll
+	llc -march=arm -mcpu=arm1176jzf-s -O=3 -filetype=obj program.opt.ll -o program.o
+	arm-linux-gnueabihf-ld -T rpi0.ld -nostdlib program.o -o program.elf
+	arm-linux-gnueabihf-objcopy program.elf -O binary program.bin
+
 # make and disassemble
 dump:
 	make

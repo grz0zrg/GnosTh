@@ -91,7 +91,8 @@ uboot_restore_sp:
     adr lr, 0f
     ldr pc, [r8, #UBOOT_JT_TSTC]@ call tstc() : result in r0 (-1 if char. available 0 if not)
     0:
-    neg r5, r0                  @ move result to TOS
+    mvn r5, r0
+    add r5, r5, #1              @ move result to TOS
     UBOOT_RESTORE_USER_SP
     pop { r0-r4, r6-r12, lr }
 .endm
@@ -179,7 +180,7 @@ uboot_restore_sp:
 @ require a pointer to a RAM area
 @ as argument, area should have
 @ enough space to hold the struct
-.macro UBOOT_API_SYSCALL number
+.macro UBOOT_API_SYSCALL, number, no_stack=0
     .if \number == UBOOT_API_GETC || \number == UBOOT_API_TSTC
         push { r5 }
     .endif
@@ -279,11 +280,14 @@ uboot_restore_sp:
         adr r5, 43b
         ldr r5, [r5]            @ value on TOS
         .if \number == UBOOT_API_TSTC
-            neg r5, r5
+            mvn r5, r5
+            add r5, r5, #1
         .endif
     .endif
-    .if \number == UBOOT_API_PUTC || \number == UBOOT_API_PUTS || \number == UBOOT_API_UDELAY || \number == UBOOT_API_ENV_SET || \number == UBOOT_API_DEV_ENUM || \number == UBOOT_API_CACHE_CARE
-        pop { r5 }
+    .if \no_stack == 0
+        .if \number == UBOOT_API_PUTC || \number == UBOOT_API_PUTS || \number == UBOOT_API_UDELAY || \number == UBOOT_API_ENV_SET || \number == UBOOT_API_DEV_ENUM || \number == UBOOT_API_CACHE_CARE
+            pop { r5 }
+        .endif
     .endif
 .endm
 
