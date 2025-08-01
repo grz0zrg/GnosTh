@@ -23,7 +23,7 @@ Compiler code is commented and is fairly small with \~350 lines of ARM assembly 
 
 See a write-up [here](https://www.onirom.fr/wiki/blog/30-11-2024_writing_a_small_forth_based_rpi_os_part_2_arm_forth_dialect_implementation/)
 
-Transpiler write-up [here](https://www.onirom.fr/wiki/blog/26-07-2025_arm_forth_dialect_code_generation_improvements_with_llvm_ir/)
+Transpiler write-up [here](https://www.onirom.fr/wiki/blog/02-08-2025_transpiling_forth_dialect_to_llvm_ir/)
 
 This compiler does not handle errors at all. (by design; simpler but has gotchas !)
 
@@ -151,7 +151,7 @@ See *vscode* directory, syntax highlighting was quickly hacked up based on Filip
 
 ## Transpiler
 
-This compiler has two independent code generation mode : a standard mode (default) and a transpile mode, the transpile mode use a small templating engine / "VM" with stack tracking (see`src/transpiler/transpiler.inc`), it was made to output in SSA form, initial goal was to generate LLVM IR code, it can be considered as the "optimizing" part of the compiler by leveraging modern tools to transform stack based programs to registers based programs for register machines.
+This compiler has two independent code generation mode : a standard mode (default) and a transpile mode, the transpile mode use a small templating engine / "VM" with stack tracking (see `src/transpiler/transpiler.inc`), it was made to output in SSA form, initial goal was to generate LLVM IR code, it can be considered as the "optimizing" part of the compiler by leveraging modern tools to transform stack based programs to registers based programs for register machines.
 
 Side use case for the transpiler is to check program correctness, failure to generate valid target language code may signal issues with the stack. 
 
@@ -163,7 +163,9 @@ See write-up [here](https://www.onirom.fr/wiki/blog/02-08-2025_transpiling_forth
 
 The output code / mode is controlled by the `FORTH_OUTPUT_CODE` define which can be `ARM_OUTPUT` or `LLVM_IR_OUTPUT` or `P5JS_OUTPUT` at the moment, `FORTH_TRANSPILE` is set based on the output mode.
 
-Adding another language such as C etc. as a target is easy (see p5.js), just have to craft a new dictionary for the target language and craft the output code of literals / variables in `src/transpiler/your_target/misc.inc`. (also may introduce another output mode definition and adjust `FORTH_TRANSPILE` based on the mode) Immediate words don't change much so it is okay to use the ones already defined in the LLVM dictionary, the only exception is `entrypoint` as it append the first few lines (header) of the generated code such as main function.
+Adding another language such as C etc. as a target is easy (see p5.js), just have to craft a new dictionary for the target language and craft the output code of literals / variables in `src/transpiler/your_target/misc.inc`. (also may introduce another output mode definition and adjust `FORTH_TRANSPILE` based on the mode)
+
+Immediate words don't change much so it is okay to use the ones already defined in the LLVM dictionary, the only exception is `entrypoint` as it append the first few lines (header) of the generated code such as main function.
 
 All the code is generated into a single function.
 
@@ -196,6 +198,8 @@ Second mode is best, has usability disadvantages though :
 ### LLVM IR generator limitations
 
 Phi nodes are generated for conditionals but not implemented for loop constructs so it may generate invalid LLVM IR when stack values are spilled out of loops. (considered as okay as spilling values out of loop may be hard to reason about)
+
+There should be no depth mismatch in conditionals. (untested though, may works ?)
 
 Phi nodes are actually not needed as [temporary variables / stack](https://stackoverflow.com/a/11487580/4766443) could be used instead, it is still unclear to me whether this method is simpler than phi nodes generation though...
 
@@ -398,7 +402,7 @@ To get the transpiler output i use [CPUlator](https://cpulator.01xz.net/) tool :
 * go into "load/save memory" pane in the sidebar of "memory" view, change file format to "Text, comma" / "Signed decimal" / "4 bytes", put start / end address and get the .txt
 * p5.js code is directly readable by opening the .bin as text file but the first few bytes should be removed (or adjusted in previous step, it start by +4 bytes), same at the end
 * paste the code into some editor such as [p5.js editor](https://editor.p5js.org/)
-* open data .txt and paste its content into data array (at the beginning)
+* open data .txt and paste its content into *data* array (at the beginning)
 * adjust `DATA_BASE` variable to the data start address
 * infinite loop may be removed as the code is wrapped into `draw()` which is called per frame
 
